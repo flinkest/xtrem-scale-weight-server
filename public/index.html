@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Waagen-Anzeige</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f0f2f5;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            padding: 40px;
+            text-align: center;
+            max-width: 600px;
+            width: 100%;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+        }
+
+        .weight-display {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            font-size: 4em;
+            font-weight: bold;
+            padding: 40px;
+            border-radius: 15px;
+            margin: 20px 0;
+            min-height: 150px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
+            transition: all 0.3s ease;
+        }
+
+        .weight-display.updating {
+            transform: scale(1.05);
+        }
+
+        .status {
+            display: flex;
+            justify-content: space-around;
+            margin-top: 30px;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .status-item {
+            background: #f8f9fa;
+            padding: 15px 25px;
+            border-radius: 10px;
+            flex: 1;
+            min-width: 150px;
+        }
+
+        .status-label {
+            color: #666;
+            font-size: 0.9em;
+            margin-bottom: 5px;
+        }
+
+        .status-value {
+            color: #333;
+            font-size: 1.2em;
+            font-weight: bold;
+        }
+
+        .connection-status {
+            display: inline-block;
+            padding: 8px 20px;
+            border-radius: 20px;
+            margin-top: 20px;
+            font-weight: bold;
+            transition: all 0.3s ease;
+        }
+
+        .connected {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .disconnected {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 8px;
+            animation: pulse 2s infinite;
+        }
+
+        .indicator.connected {
+            background: #28a745;
+        }
+
+        .indicator.disconnected {
+            background: #dc3545;
+            animation: none;
+        }
+
+        @keyframes pulse {
+            0% {
+                box-shadow: 0 0 0 0 rgba(40, 167, 69, 0.7);
+            }
+            70% {
+                box-shadow: 0 0 0 10px rgba(40, 167, 69, 0);
+            }
+            100% {
+                box-shadow: 0 0 0 0 rgba(40, 167, 69, 0);
+            }
+        }
+
+        .config-info {
+            margin-top: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            text-align: left;
+        }
+
+        .config-info h3 {
+            margin-bottom: 10px;
+            color: #495057;
+        }
+
+        .config-item {
+            margin: 5px 0;
+            color: #6c757d;
+        }
+
+        .loading {
+            font-size: 1.5em;
+            color: #666;
+        }
+
+        @media (max-width: 600px) {
+            .weight-display {
+                font-size: 3em;
+                padding: 30px;
+            }
+            
+            h1 {
+                font-size: 2em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Waagen-Anzeige</h1>
+        
+        <div class="weight-display" id="weightDisplay">
+            <span class="loading">Verbinde...</span>
+        </div>
+        
+        <div class="status" id="statusContainer" style="display: none;">
+            <div class="status-item">
+                <div class="status-label">Brutto</div>
+                <div class="status-value" id="brutWeight">-</div>
+            </div>
+            <div class="status-item">
+                <div class="status-label">Tara</div>
+                <div class="status-value" id="tareWeight">-</div>
+            </div>
+            <div class="status-item">
+                <div class="status-label">Netto</div>
+                <div class="status-value" id="netWeight">-</div>
+            </div>
+        </div>
+        
+        <div class="connection-status disconnected" id="connectionStatus">
+            <span class="indicator disconnected"></span>
+            <span id="connectionText">Nicht verbunden</span>
+        </div>
+        
+        <div class="config-info">
+            <h3>Konfiguration</h3>
+            <div class="config-item">
+                <strong>Waagen-IP:</strong> <span id="scaleIP">-</span>
+            </div>
+            <div class="config-item">
+                <strong>Server-Port:</strong> <span id="serverPort">-</span>
+            </div>
+            <div class="config-item">
+                <strong>Letzte Aktualisierung:</strong> <span id="lastUpdate">-</span>
+            </div>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        const weightDisplay = document.getElementById('weightDisplay');
+        const connectionStatus = document.getElementById('connectionStatus');
+        const connectionText = document.getElementById('connectionText');
+        const statusContainer = document.getElementById('statusContainer');
+        const lastUpdateElement = document.getElementById('lastUpdate');
+        
+        // Load configuration
+        fetch('/api/config')
+            .then(res => res.json())
+            .then(config => {
+                document.getElementById('scaleIP').textContent = config.scaleIP;
+                document.getElementById('serverPort').textContent = config.serverPort;
+            });
+
+        socket.on('connect', () => {
+            console.log('Connected to server');
+        });
+
+        socket.on('weight', (data) => {
+            console.log('Weight data:', data);
+            
+            // Update weight display
+            if (data.display) {
+                weightDisplay.innerHTML = data.display;
+                weightDisplay.classList.add('updating');
+                setTimeout(() => weightDisplay.classList.remove('updating'), 300);
+                
+                // Update connection status
+                connectionStatus.className = 'connection-status connected';
+                connectionStatus.querySelector('.indicator').className = 'indicator connected';
+                connectionText.textContent = 'Verbunden';
+                
+                // Show status container
+                statusContainer.style.display = 'flex';
+                
+                // Update detailed values if available
+                if (data.brut !== undefined) {
+                    document.getElementById('brutWeight').textContent = 
+                        `${data.brut.toFixed(2)} ${data.unit || ''}`;
+                    document.getElementById('tareWeight').textContent = 
+                        `${data.tare.toFixed(2)} ${data.unit || ''}`;
+                    document.getElementById('netWeight').textContent = 
+                        `${data.net.toFixed(2)} ${data.unit || ''}`;
+                }
+                
+                // Update last update time
+                const now = new Date();
+                lastUpdateElement.textContent = now.toLocaleTimeString('de-DE');
+            } else if (data.connected === false) {
+                weightDisplay.innerHTML = '<span class="loading">Keine Verbindung</span>';
+                connectionStatus.className = 'connection-status disconnected';
+                connectionStatus.querySelector('.indicator').className = 'indicator disconnected';
+                connectionText.textContent = 'Nicht verbunden';
+            }
+        });
+
+        socket.on('error', (error) => {
+            console.error('Socket error:', error);
+            weightDisplay.innerHTML = '<span class="loading">Fehler: ' + error.message + '</span>';
+            connectionStatus.className = 'connection-status disconnected';
+            connectionStatus.querySelector('.indicator').className = 'indicator disconnected';
+            connectionText.textContent = 'Fehler';
+        });
+
+        socket.on('disconnect', () => {
+            console.log('Disconnected from server');
+            weightDisplay.innerHTML = '<span class="loading">Verbindung getrennt</span>';
+            connectionStatus.className = 'connection-status disconnected';
+            connectionStatus.querySelector('.indicator').className = 'indicator disconnected';
+            connectionText.textContent = 'Getrennt';
+        });
+    </script>
+</body>
+</html>
