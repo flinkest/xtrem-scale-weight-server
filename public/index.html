@@ -50,11 +50,11 @@
             align-items: center;
             justify-content: center;
             text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
-            transition: all 0.3s ease;
+            /* No transition for maximum performance */
         }
 
         .weight-display.updating {
-            transform: scale(1.05);
+            /* No scaling animation */
         }
 
         .status {
@@ -233,13 +233,15 @@
         });
 
         socket.on('weight', (data) => {
-            console.log('Weight data:', data);
+            // Remove console.log for performance
+            // console.log('Weight data:', data);
             
-            // Update weight display
+            // Update weight display immediately for fastest response
             if (data.display) {
                 weightDisplay.innerHTML = data.display;
-                weightDisplay.classList.add('updating');
-                setTimeout(() => weightDisplay.classList.remove('updating'), 300);
+                // No animation for maximum speed
+                // weightDisplay.classList.add('updating');
+                // setTimeout(() => weightDisplay.classList.remove('updating'), 100);
                 
                 // Update connection status
                 connectionStatus.className = 'connection-status connected';

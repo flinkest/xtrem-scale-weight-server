@@ -1,15 +1,16 @@
 # XTREM Scale Weight Server
 
-[![npm version](https://badge.fury.io/js/xtrem-scale-server.svg)](https://www.npmjs.com/package/xtrem-scale-server)
+[![npm version](https://badge.fury.io/js/%40flinkest%2Fxtrem-scale-server.svg)](https://www.npmjs.com/package/@flinkest/xtrem-scale-server)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 A Node.js server that connects to XTREM network scales via UDP and provides real-time weight data through WebSockets and REST API.
 
 ## Features
 
-- **Real-time Weight Monitoring**: Live weight updates via WebSockets
+- **Real-time Weight Monitoring**: Live weight updates via WebSockets and Socket.io
 - **Web Interface**: Built-in responsive web interface for weight monitoring
 - **REST API**: Simple JSON endpoints for weight data retrieval
+- **WebSocket API**: Native WebSocket support for easy integration
 - **UDP Protocol Support**: Direct communication with XTREM scales
 - **Auto-reconnection**: Robust connection handling with automatic retry
 - **Cross-platform**: Works on Windows, macOS, and Linux
@@ -24,20 +25,40 @@ A Node.js server that connects to XTREM network scales via UDP and provides real
 
 ### Prerequisites
 - Node.js 14.x or higher
-- Network access to XTREM scale (WiFi: 192.168.4.1)
+- Network access to your XTREM scale
 
-### Install Dependencies
+### Option 1: Global Installation (Recommended)
 ```bash
-npm install
+# Install globally
+npm install -g @flinkest/xtrem-scale-server
+
+# Create configuration file
+echo "SCALE_IP=your.scale.ip.address" > .env
+echo "PORT=3000" >> .env
+
+# Start server
+xtrem-scale-server
+
+# Start with debug mode
+xtrem-scale-server --debug
+```
+
+### Option 2: Local Project Installation
+```bash
+# Install in your project
+npm install @flinkest/xtrem-scale-server
+
+# Create configuration file
+echo "SCALE_IP=your.scale.ip.address" > .env
+echo "PORT=3000" >> .env
+
+# Edit .env file with your settings
+nano .env
 ```
 
 ### Configuration
-Create a `.env` file based on `.env.example`:
+Create a `.env` file in your current directory:
 ```bash
-# Copy example configuration
-cp .env.example .env
-
-# Edit .env file with your settings
 SCALE_IP=your.scale.ip.address
 PORT=3000
 ```
@@ -47,12 +68,23 @@ Configuration options:
 - `PORT`: Web server port (default: 3000)
 
 ### Start Server
+
+**Global installation:**
 ```bash
 # Normal mode
-npm start
+xtrem-scale-server
 
 # Debug mode (shows all communication)
-node server.js --debug
+xtrem-scale-server --debug
+```
+
+**Local installation:**
+```bash
+# Normal mode
+npx @flinkest/xtrem-scale-server
+
+# Debug mode
+npx @flinkest/xtrem-scale-server --debug
 ```
 
 The server will start on `http://localhost:3000`
@@ -76,8 +108,39 @@ Response:
 }
 ```
 
+### WebSocket API
 
-## WebSocket Integration
+Connect to the WebSocket server for real-time weight updates:
+
+```javascript
+// Simple WebSocket connection
+const ws = new WebSocket('ws://localhost:3001');
+
+ws.onmessage = function(event) {
+    const data = JSON.parse(event.data);
+    console.log('Weight:', data.display);
+};
+
+ws.onopen = () => console.log('Connected to scale');
+```
+
+**WebSocket Data Format:**
+```json
+{
+  "display": "0.162 kg",
+  "brut": 0.162,
+  "tare": 0.000,
+  "net": 0.162,
+  "unit": "kg",
+  "connected": true,
+  "timestamp": 1699123456789
+}
+```
+
+
+## Socket.io Integration
+
+The web interface uses Socket.io for WebSocket communication:
 
 ### Vanilla JavaScript Example
 ```javascript
@@ -254,6 +317,11 @@ export class WeightMonitorComponent implements OnInit, OnDestroy {
 - **UDP Send Port**: 4444 (to scale)
 - **UDP Receive Port**: 5555 (from scale)
 
+### Server Ports
+- **Web Interface**: http://localhost:3000
+- **WebSocket API**: ws://localhost:3001
+- **Socket.io**: ws://localhost:3000/socket.io/
+
 ### Connection Process
 1. Connect your computer to the XTREM scale's network
 2. Configure the scale IP in your `.env` file
@@ -291,13 +359,34 @@ The server communicates with XTREM scales using a proprietary UDP protocol in st
 
 ## Development
 
+### Development Setup
+```bash
+# Clone the repository
+git clone https://github.com/flinkest/xtrem-scale-weight-server.git
+cd xtrem-scale-weight-server
+
+# Install dependencies
+npm install
+
+# Copy configuration
+cp .env.example .env
+
+# Edit configuration
+nano .env
+
+# Start in development mode
+npm run dev
+```
+
 ### Project Structure
 ```
 ├── server.js          # Main server application
 ├── public/
 │   └── index.html     # Web interface
+├── .env.example       # Example configuration
 ├── package.json       # Dependencies and scripts
-└── README.md          # This file
+├── README.md          # This file
+└── CLAUDE.md          # Technical documentation
 ```
 
 ### Contributing

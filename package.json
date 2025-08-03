@@ -1,15 +1,53 @@
 {
-  "name": "scale-weight-server",
-  "version": "1.0.0",
-  "description": "Web server for displaying scale weight data",
+  "name": "@flinkest/xtrem-scale-server",
+  "version": "1.2.0",
+  "description": "Node.js server for XTREM network scales - provides real-time weight data via WebSockets and REST API",
   "main": "server.js",
+  "bin": {
+    "xtrem-scale-server": "./server.js"
+  },
   "scripts": {
     "start": "node server.js",
+    "start:debug": "node server.js --debug",
     "dev": "nodemon server.js"
   },
+  "keywords": [
+    "xtrem",
+    "scale",
+    "weight",
+    "udp",
+    "websocket",
+    "industrial",
+    "measurement",
+    "iot"
+  ],
+  "author": {
+    "name": "flinkest",
+    "url": "https://github.com/flinkest"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/flinkest/xtrem-scale-weight-server.git"
+  },
+  "bugs": {
+    "url": "https://github.com/flinkest/xtrem-scale-weight-server/issues"
+  },
+  "homepage": "https://github.com/flinkest/xtrem-scale-weight-server#readme",
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "files": [
+    "server.js",
+    "public/",
+    ".env.example",
+    "README.md",
+    "CLAUDE.md"
+  ],
   "dependencies": {
     "express": "^4.18.2",
     "socket.io": "^4.6.1",
+    "ws": "^8.16.0",
     "dotenv": "^16.3.1"
   },
   "devDependencies": {

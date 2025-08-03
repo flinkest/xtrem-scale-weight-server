@@ -1,12 +1,19 @@
+#!/usr/bin/env node
+
 const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
+const WebSocket = require('ws');
 const dgram = require('dgram');
+const path = require('path');
 require('dotenv').config();
 
 const app = express();
 const server = http.createServer(app);
 const io = socketIo(server);
+
+// WebSocket Server on separate port to avoid conflict
+const wss = new WebSocket.Server({ port: 3001 });
 
 const PORT = process.env.PORT || 3000;
 const SCALE_IP = process.env.SCALE_IP || '192.168.4.1';
@@ -27,6 +34,7 @@ console.log('='.repeat(50));
 if (DEBUG_MODE) {
     console.log('[DEBUG] Debug mode enabled');
 }
+console.log('[Server] Streaming mode enabled');
 
 const client = dgram.createSocket('udp4');
 
@@ -46,11 +54,15 @@ try {
 }
 
 client.on('message', (msg, rinfo) => {
+    const timestamp = new Date().toISOString().substring(11, 23);
     if (DEBUG_MODE) {
-        console.log(`[DEBUG] Response from ${rinfo.address}:${rinfo.port}`);
+        console.log(`[${timestamp}] Response from ${rinfo.address}:${rinfo.port}`);
         console.log(`[DEBUG] Size: ${msg.length} bytes`);
         console.log(`[DEBUG] Hex: ${msg.toString('hex')}`);
         console.log(`[DEBUG] ASCII: ${msg.toString('ascii')}`);
+    } else {
+        // Count messages per second
+        console.log(`[${timestamp}] Data received (${msg.length} bytes)`);
     }
 
     // Clear response timeout - we got a response
@@ -95,25 +107,40 @@ client.on('message', (msg, rinfo) => {
 
                 // Update current weight and broadcast to web clients
                 const brutWeightNum = parseFloat(brutWeight);
+                const tareWeightNum = parseFloat(tareWeight);
                 const formattedWeight = `${brutWeightNum.toFixed(3)} ${unit}`;
 
-                if (currentWeight !== formattedWeight) {
-                    currentWeight = formattedWeight;
-                    console.log('[Server] Weight:', formattedWeight);
+                // Always update and emit - don't wait for display changes for faster response
+                const weightData = {
+                    display: formattedWeight,
+                    brut: brutWeightNum,
+                    tare: tareWeightNum,
+                    net: brutWeightNum - tareWeightNum,
+                    unit: unit,
+                    connected: true,
+                    timestamp: Date.now()
+                };
 
-                    const weightData = {
-                        display: formattedWeight,
-                        brut: brutWeightNum,
-                        tare: parseFloat(tareWeight),
-                        net: brutWeightNum - parseFloat(tareWeight),
-                        unit: unit,
-                        connected: true
-                    };
-
-                    io.emit('weight', weightData);
-                    if (DEBUG_MODE) {
-                        console.log('[DEBUG] Weight data emitted to WebSocket clients');
+                // Always emit for maximum responsiveness
+                io.emit('weight', weightData);
+                
+                // Send to WebSocket clients
+                wss.clients.forEach(ws => {
+                    if (ws.readyState === WebSocket.OPEN) {
+                        ws.send(JSON.stringify(weightData));
                     }
+                });
+
+                // Update currentWeight and log with timestamp
+                const oldWeight = currentWeight;
+                currentWeight = formattedWeight;
+                
+                // Always show weight updates with precise timestamp
+                const timestamp = new Date().toISOString().substring(11, 23);
+                console.log(`[${timestamp}] Weight: ${formattedWeight}`);
+
+                if (DEBUG_MODE) {
+                    console.log('[DEBUG] Weight data emitted to WebSocket clients');
                 }
             }
         } catch (err) {
@@ -124,12 +151,7 @@ client.on('message', (msg, rinfo) => {
     // In streaming mode, data comes automatically - no need to send commands
 });
 
-function sendNextCommand() {
-    // Not used in streaming mode - scale sends data automatically
-    if (DEBUG_MODE) {
-        console.log('[DEBUG] In streaming mode - no need to send commands');
-    }
-}
+// Function removed - not needed in streaming mode
 
 function handleConnectionLoss() {
     if (isConnected) {
@@ -143,7 +165,7 @@ function handleConnectionLoss() {
         });
     }
 
-    // Clear any existing timeouts
+    // Clear any existing timeouts to prevent memory leaks
     if (responseTimeout) {
         clearTimeout(responseTimeout);
         responseTimeout = null;
@@ -151,11 +173,13 @@ function handleConnectionLoss() {
 
     if (reconnectTimeout) {
         clearTimeout(reconnectTimeout);
+        reconnectTimeout = null;
     }
 
     // Try to reconnect after 2 seconds
     reconnectTimeout = setTimeout(() => {
         console.log('[Server] Attempting to reconnect...');
+        reconnectTimeout = null; // Clear reference after use
         initializeScale(); // Re-send START command
     }, 2000);
 }
@@ -188,7 +212,7 @@ function initializeScale() {
 }
 
 // Check connection health every 10 seconds
-setInterval(() => {
+const healthCheckInterval = setInterval(() => {
     const timeSinceLastResponse = Date.now() - lastResponseTime;
     if (timeSinceLastResponse > 15000 && isConnected) { // 15 seconds without response
         console.log('[Server] No response for 15 seconds, connection may be lost');
@@ -203,8 +227,8 @@ client.on('listening', () => {
     // Don't initialize here - wait for connect callback
 });
 
-// Serve static files
-app.use(express.static('public'));
+// Serve static files - use path relative to this script
+app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/json', (req, res) => {
     // Extract numeric value from currentWeight (e.g., "0.162 kg" -> 0.162)
@@ -272,15 +296,40 @@ function stopStreaming() {
 process.on('SIGINT', () => {
     console.log('\nShutting down gracefully...');
 
+    // Clean up timers and intervals to prevent memory leaks
+    if (responseTimeout) {
+        clearTimeout(responseTimeout);
+        responseTimeout = null;
+    }
+    
+    if (reconnectTimeout) {
+        clearTimeout(reconnectTimeout);
+        reconnectTimeout = null;
+    }
+    
+    if (healthCheckInterval) {
+        clearInterval(healthCheckInterval);
+    }
+
     // Send STOP command to scale
     stopStreaming();
 
     // Give it time to send the STOP command
     setTimeout(() => {
-        client.close();
+        try {
+            client.close();
+        } catch (err) {
+            console.error('Error closing UDP client:', err.message);
+        }
+        
         server.close(() => {
             console.log('Server closed');
             process.exit(0);
         });
     }, 100);
+});
+
+process.on('SIGTERM', () => {
+    console.log('\nReceived SIGTERM, shutting down gracefully...');
+    process.emit('SIGINT');
 });
